@@ -151,39 +151,41 @@ function updateStats(realtime) {
 }
 
 function updateActiveBreaks(breaks) {
-    const container = document.getElementById('activeBreaksList');
+    const container = document.getElementById('activeBreaksBody');
     document.getElementById('activeBreaksBadge').textContent = breaks.length;
 
     if (breaks.length === 0) {
-        container.innerHTML = '<p class="text-gray-400 text-center py-8"><i class="fas fa-coffee text-3xl mb-2 block"></i>No active breaks</p>';
+        container.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-coffee text-2xl mb-2 block"></i>No active breaks</td></tr>';
         return;
     }
 
     container.innerHTML = breaks.map(b => {
-        const statusClass = b.is_overdue ? 'border-red-200 bg-red-50' : 'border-gray-200';
+        const rowClass = b.is_overdue ? 'bg-red-50' : 'hover:bg-gray-50';
         const timeClass = b.is_overdue ? 'text-red-600 font-bold' : 'text-gray-600';
-        const badge = b.is_overdue
-            ? `<span class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">+${b.over_limit_minutes.toFixed(0)}m over</span>`
-            : '';
+        const statusBadge = b.is_overdue
+            ? `<span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-600 font-medium"><i class="fas fa-exclamation-triangle mr-1"></i>+${b.over_limit_minutes.toFixed(0)}m over</span>`
+            : `<span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-600 font-medium"><i class="fas fa-clock mr-1"></i>On time</span>`;
 
         return `
-            <div class="border ${statusClass} rounded-lg p-3 mb-2">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-sm font-medium">
+            <tr class="${rowClass} transition-colors">
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-medium text-blue-600">
                             ${getInitials(b.full_name)}
                         </div>
-                        <div>
-                            <p class="font-medium text-gray-800">${b.full_name}</p>
-                            <p class="text-xs text-gray-500">${b.break_type}</p>
-                        </div>
+                        <span class="font-medium text-gray-800">${b.full_name}</span>
                     </div>
-                    <div class="text-right">
-                        <p class="${timeClass}">${b.duration_minutes.toFixed(0)}m</p>
-                        ${badge}
-                    </div>
-                </div>
-            </div>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <span class="text-gray-600">${b.break_type}</span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <span class="${timeClass} font-semibold">${b.duration_minutes.toFixed(0)} min</span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    ${statusBadge}
+                </td>
+            </tr>
         `;
     }).join('');
 }
