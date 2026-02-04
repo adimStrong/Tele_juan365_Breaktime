@@ -50,12 +50,12 @@ ENV BASE_DIR=/app
 ENV PYTHONPATH=/app
 ENV DATA_DIR=/app/data
 
-# Expose dashboard port
-EXPOSE 8000
+# Expose dashboard port (Railway will set PORT env var)
+EXPOSE 8080
 
-# Health check for Railway
+# Health check for Railway (uses PORT from Railway, defaults to 8080)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Start supervisord (manages bot + dashboard + sync)
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
