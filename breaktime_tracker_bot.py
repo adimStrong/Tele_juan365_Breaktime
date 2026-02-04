@@ -576,7 +576,9 @@ async def show_summary(query, user_id, username, full_name):
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the main menu with buttons"""
+    """Show the main menu with buttons (same as start)"""
+    user = update.effective_user
+
     keyboard = [
         [
             InlineKeyboardButton("☕ Break Out (B1)", callback_data='B1'),
@@ -596,7 +598,18 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("🕐 **Break Time Tracker**\n\nSelect an option:", reply_markup=reply_markup, parse_mode='Markdown')
+
+    welcome_message = (
+        f"👋 Welcome {user.first_name}!\n\n"
+        "🕐 **Break Time Tracker Bot**\n\n"
+        "Track your breaks using the buttons below:\n\n"
+        "☕ **Break** - B1 (Out) / B2 (Back) - 1 Hour\n"
+        "🚻 **WC** - W1 (Out) / W2 (Back) - 15 mins\n"
+        "⚠️ **Other** - O1 (Out) / O2 (Back) - Reason required\n\n"
+        "Click a button to log your break time!"
+    )
+
+    await update.message.reply_text(welcome_message, reply_markup=reply_markup, parse_mode='Markdown')
 
 
 def get_keyboard(user_id):
