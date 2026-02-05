@@ -16,7 +16,8 @@ PH_TZ = pytz.timezone('Asia/Manila')
 # Configuration
 BASE_DIR = os.getenv('BASE_DIR', '/app')
 DATA_DIR = os.path.join(BASE_DIR, 'data')
-BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
+# Store backups inside data directory so they're on the persistent volume
+BACKUP_DIR = os.path.join(DATA_DIR, 'backups')
 DATABASE_PATH = os.path.join(DATA_DIR, 'breaktime.db')
 MAX_BACKUPS = 7  # Keep last 7 backups
 
