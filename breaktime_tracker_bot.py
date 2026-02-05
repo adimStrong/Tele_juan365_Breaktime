@@ -73,6 +73,9 @@ waiting_for_reason_users = {}
 # Store last action timestamps to prevent duplicates
 last_action_timestamps = {}
 
+# Store last overdue notification time per user (to limit to every 15 mins)
+last_overdue_notification = {}
+
 # Break type display name mapping (reverse lookup)
 BREAK_TYPE_DISPLAY = {
     'B': '☕ Break',
@@ -184,6 +187,7 @@ def load_active_sessions_from_db():
                 'active': True,
                 'reason': session.get('reason'),
                 'full_name': session.get('full_name', 'Unknown'),
+                'username': session.get('username', 'N/A'),
                 'group_chat_id': session.get('group_chat_id')
             }
             loaded_count += 1
@@ -431,6 +435,7 @@ Please type the reason for your break:""",
             'start_time': timestamp,
             'active': True,
             'full_name': full_name,
+            'username': username,
             'group_chat_id': group_chat_id
         }
         if break_type_code in ['E', 'S']:
@@ -481,6 +486,9 @@ You are trying to end a '{break_type}' break, but your active break is '{active_
 
         # Clear session FIRST to stop reminders immediately
         user_sessions[user_id] = {'active': False}
+        # Clear overdue notification tracking
+        if user_id in last_overdue_notification:
+            del last_overdue_notification[user_id]
 
         log_break_activity(user_id, username, full_name, break_type, 'BACK', timestamp, duration_minutes, reason, group_chat_id=group_chat_id)
 
@@ -517,6 +525,7 @@ async def handle_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'active': True,
         'reason': reason,
         'full_name': full_name,
+        'username': username,
         'group_chat_id': group_chat_id
     }
 
@@ -697,6 +706,7 @@ Please finish it first!""",
             'active': True,
             'reason': reason_from_command,
             'full_name': full_name,
+            'username': username,
             'group_chat_id': group_chat_id,
             'reminder_sent': False
         }
@@ -742,6 +752,9 @@ You are trying to end a '{break_type}' break, but your active break is '{active_
 
         # Clear session FIRST to stop reminders immediately
         user_sessions[user_id] = {'active': False}
+        # Clear overdue notification tracking
+        if user_id in last_overdue_notification:
+            del last_overdue_notification[user_id]
 
         log_break_activity(user_id, username, full_name, break_type, 'BACK', timestamp, duration_minutes, reason, session_group_chat_id)
 
@@ -784,12 +797,17 @@ def check_and_clear_cache_signal():
 
 
 async def check_break_reminders(context: ContextTypes.DEFAULT_TYPE):
-    """Periodically check for long-running breaks and send reminders to group EVERY MINUTE."""
+    """Periodically check for long-running breaks and send reminders to group (max every 15 mins per user)."""
+    global last_overdue_notification
+
     # Check for cache clear signal from API
     check_and_clear_cache_signal()
 
     now = get_ph_time()
     now_naive = datetime.strptime(now.strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+
+    # Notification cooldown in minutes (only send once every 15 mins per user)
+    NOTIFICATION_COOLDOWN_MINUTES = 15
 
     for user_id, session in user_sessions.items():
         if session.get('active'):
@@ -806,13 +824,31 @@ async def check_break_reminders(context: ContextTypes.DEFAULT_TYPE):
                 duration_minutes = (now_naive - start_time).total_seconds() / 60
 
                 if duration_minutes >= threshold_minutes:
+                    # Check if we've sent a notification recently (within 15 mins)
+                    last_notif_time = last_overdue_notification.get(user_id)
+                    if last_notif_time:
+                        minutes_since_last = (now_naive - last_notif_time).total_seconds() / 60
+                        if minutes_since_last < NOTIFICATION_COOLDOWN_MINUTES:
+                            # Skip - already notified within cooldown period
+                            continue
+
                     full_name = session.get('full_name', 'there')
+                    username = session.get('username', '')
                     over_minutes = int(duration_minutes - threshold_minutes)
 
                     # Always send to group if GROUP_CHAT_ID is set
                     target_chat_id = GROUP_CHAT_ID if GROUP_CHAT_ID else user_id
 
+                    # Create user mention/tag
+                    if username and username != 'N/A':
+                        user_tag = f"@{username}"
+                    else:
+                        # Use text mention with user ID (works in Telegram markdown)
+                        user_tag = f"[{full_name}](tg://user?id={user_id})"
+
                     warning_msg = f"""⚠️ BREAK TIME WARNING ⚠️
+
+{user_tag}
 
 👤 {full_name}
 📍 {break_type}
@@ -825,9 +861,12 @@ Please clock back now using /b2 or /w2"""
                     try:
                         await context.bot.send_message(
                             chat_id=target_chat_id,
-                            text=warning_msg
+                            text=warning_msg,
+                            parse_mode='Markdown'
                         )
-                        print(f"⚠️ Warning sent for {full_name} - {break_type} over by {over_minutes} mins")
+                        # Update last notification time
+                        last_overdue_notification[user_id] = now_naive
+                        print(f"⚠️ Warning sent for {full_name} ({user_tag}) - {break_type} over by {over_minutes} mins (next in {NOTIFICATION_COOLDOWN_MINUTES}m)")
                     except Exception as e:
                         print(f"Failed to send reminder: {e}")
 

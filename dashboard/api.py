@@ -942,6 +942,136 @@ async def export_report(
 
 
 # ============================================
+# BACKUP
+# ============================================
+
+from database.backup import (
+    create_backup,
+    create_sql_dump,
+    list_backups,
+    rotate_backups,
+    restore_backup,
+    run_daily_backup
+)
+
+@app.get("/api/backup/list", tags=["Backup"])
+async def get_backups():
+    """List all available backups."""
+    try:
+        backups = list_backups()
+        return {
+            "count": len(backups),
+            "backups": backups
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/backup/create", tags=["Backup"])
+async def create_manual_backup(
+    compress: bool = Query(True, description="Compress backup with gzip"),
+    sql_dump: bool = Query(False, description="Create SQL text dump instead of binary")
+):
+    """Create a manual backup of the database."""
+    try:
+        if sql_dump:
+            result = create_sql_dump()
+        else:
+            result = create_backup(compress=compress)
+
+        if not result['success']:
+            raise HTTPException(status_code=500, detail=result.get('error', 'Backup failed'))
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/backup/rotate", tags=["Backup"])
+async def rotate_old_backups():
+    """Remove old backups, keeping only the 7 most recent."""
+    try:
+        result = rotate_backups()
+        if not result['success']:
+            raise HTTPException(status_code=500, detail=result.get('error', 'Rotation failed'))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/backup/download/{filename}", tags=["Backup"])
+async def download_backup(filename: str):
+    """Download a specific backup file."""
+    try:
+        import os
+        BASE_DIR = os.getenv('BASE_DIR', '/app')
+        BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
+        backup_path = os.path.join(BACKUP_DIR, filename)
+
+        if not os.path.exists(backup_path):
+            raise HTTPException(status_code=404, detail="Backup file not found")
+
+        # Security check - prevent path traversal
+        if '..' in filename or '/' in filename or '\\' in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+
+        media_type = "application/gzip" if filename.endswith('.gz') else "application/octet-stream"
+        return FileResponse(
+            backup_path,
+            media_type=media_type,
+            filename=filename
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Daily backup scheduler
+async def daily_backup_scheduler():
+    """Run backup at 2 AM Philippine Time daily."""
+    import asyncio
+    from datetime import datetime, time as dt_time, timedelta, timezone
+
+    PH_TZ = timezone(timedelta(hours=8))
+    BACKUP_HOUR = 2  # 2 AM
+
+    while True:
+        now = datetime.now(PH_TZ)
+        # Calculate next 2 AM
+        next_backup = now.replace(hour=BACKUP_HOUR, minute=0, second=0, microsecond=0)
+        if now >= next_backup:
+            next_backup += timedelta(days=1)
+
+        wait_seconds = (next_backup - now).total_seconds()
+        print(f"[Backup] Next scheduled backup at {next_backup.strftime('%Y-%m-%d %H:%M')} PH Time ({wait_seconds/3600:.1f}h)")
+
+        await asyncio.sleep(wait_seconds)
+
+        # Run backup
+        try:
+            result = run_daily_backup()
+            print(f"[Backup] Daily backup completed: {result}")
+        except Exception as e:
+            print(f"[Backup] Daily backup failed: {e}")
+
+# Start backup scheduler on startup
+@app.on_event("startup")
+async def start_backup_scheduler():
+    """Start the daily backup scheduler."""
+    import asyncio
+    # Create initial backup if none exists
+    backups = list_backups()
+    if len(backups) == 0:
+        print("[Backup] No backups found, creating initial backup...")
+        create_backup(compress=True)
+
+    # Start daily scheduler
+    asyncio.create_task(daily_backup_scheduler())
+    print("[Backup] Daily backup scheduler started (runs at 2 AM PH Time)")
+
+
+# ============================================
 # RUN SERVER
 # ============================================
 
