@@ -152,6 +152,13 @@ def init_database():
 
         print(f"Database initialized: {DB_FILE}")
 
+    # Check if database is empty and restore from backup if available
+    try:
+        from database.restore_on_empty import run_restore_if_needed
+        run_restore_if_needed()
+    except Exception as e:
+        print(f"Restore check skipped: {e}")
+
     return True
 
 
