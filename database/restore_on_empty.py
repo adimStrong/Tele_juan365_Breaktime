@@ -54,12 +54,17 @@ def restore_from_backup():
         # Ensure data directory exists
         Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
 
+        # Delete existing database file if it exists (backup.sql has CREATE TABLE statements)
+        if os.path.exists(DATABASE_PATH):
+            log(f"[Restore] Removing existing database to restore from backup...")
+            os.remove(DATABASE_PATH)
+
         # Read backup SQL
         with open(BACKUP_SQL_PATH, 'r', encoding='utf-8') as f:
             sql_script = f.read()
         log(f"[Restore] Read backup SQL ({len(sql_script)} bytes)")
 
-        # Create/restore database
+        # Create/restore database from scratch
         conn = sqlite3.connect(DATABASE_PATH)
         conn.executescript(sql_script)
         conn.commit()
