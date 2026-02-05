@@ -3,7 +3,7 @@ data/
 backups/
 *.db
 *.db.gz
-database/backup.sql
+# Note: database/backup.sql is NOT ignored - it's needed for Railway restore
 
 # Python
 __pycache__/
